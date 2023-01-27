@@ -1,5 +1,7 @@
 # dadoslegiveis-backend
 
+[Dados Legiveis](dadoslegiveis.lol/)
+
 ## About The Project
 
 The goal of this project is to provide an interactive way for the public to understand the expenses of Brazilian deputies by presenting the data in a visual format.
@@ -16,3 +18,5 @@ The backend also includes a scheduled task that runs daily to update the databas
 
 The project uses the psycopg2 library to interact with the PostgreSQL database and it runs in two separated containers in AWS ECS, 
 one is running the redis server and the other the fastapi server.
+
+[frontend repo](https://github.com/felri/dadoslegiveis-frontend)
