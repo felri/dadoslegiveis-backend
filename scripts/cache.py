@@ -2,7 +2,7 @@ import redis
 import os
 import simplejson as json 
 
-EXPIRATION_TIME = 1 * 86400
+EXPIRATION_TIME = 30 * 86400
 
 
 def get_redis_instance():
