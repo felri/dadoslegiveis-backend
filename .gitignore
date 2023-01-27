@@ -41,3 +41,4 @@ venv/
 datasets/
 *.csv
 copilot/
+*.sh
