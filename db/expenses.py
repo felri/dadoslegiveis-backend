@@ -2,29 +2,7 @@ import csv
 import pandas as pd
 from .db import execute_query
 import glob
-from unidecode import unidecode
-import pandas as pd
-import tempfile
-
-PARTY_LEADERS = {
-    "LIDERANCA DO CIDADANIA": "Alex Manente",
-    "LIDERANCA DO DEMOCRATAS": "Miguel Haddad",
-    "LIDERANCA DO NOVO": "Tiago Mitraud",
-    "LIDERANCA DO PARTIDO REPUBLICANO DA ORDEM SOCIAL": "Weliton Prado",
-    "LIDERANCA DO PDT": "Andre Figueiredo",
-    "LIDERANCA DO PODEMOS": "Igor Timo",
-    "LIDERANCA DO PROGRESSISTAS": "Andre Fufuca",
-    "LIDERANCA DO PSC": "Euclydes Pettersen",
-    "LIDERANCA DO PSDB": "Adolfo Viana",
-    "LIDERANCA DO PSD": "Antonio Brito",
-    "LIDERANCA DO PSL": "Delegado Waldir",
-    "LIDERANCA DO PSOL": "Samia Bomfim",
-    "LIDERANCA DO PT": "Reginaldo Lopes",
-    "LIDERANCA DO PTB": "Paulo Bengtson",
-    "LIDERANCA DO REPUBLICANOS": "Vinicius Carvalho",
-    "LIDERANCA DO SOLIDARIEDADE": "Lucas Vergilio",
-    "LIDERANCA DO UNIÃO BRASIL": "Elmar Nascimento",
-}
+from scripts.cache import cache_function
 
 
 def create_table():
@@ -41,7 +19,7 @@ def create_table():
 
     query = """
         CREATE TABLE expenses (
-            txNomeParlamentar VARCHAR(255) REFERENCES deputados (nome),
+            txNomeParlamentar VARCHAR(255),
             cpf VARCHAR(255),
             ideCadastro INTEGER,
             nuCarteiraParlamentar INTEGER,
@@ -90,6 +68,10 @@ def create_table():
             ideDocumento, 
             urlDocumento
         );
+
+        CREATE INDEX datEmissao_index ON expenses (datEmissao);
+        CREATE INDEX txtDescricao_index ON expenses (txtDescricao);
+        CREATE INDEX txNomeParlamentar_index ON expenses (txNomeParlamentar);
     """
     execute_query(query)
 
@@ -120,48 +102,6 @@ def read_all_csvs(directory):
     return rows
 
 
-def load_data(directory):
-    create_table()
-
-    csvs = read_all_csvs(directory)
-    print(f"Loaded {len(csvs)} CSV files")
-    query_keys = None
-    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-        writer = csv.DictWriter(f, fieldnames=query_keys)
-        writer.writeheader()
-        for rows in csvs:
-            print(f"Loaded {len(rows)} rows from CSV file")
-            for row in rows:
-                if "LIDMIN" in row["txNomeParlamentar"]:
-                    continue
-
-                leader = unidecode(row["txNomeParlamentar"])
-                leader = PARTY_LEADERS.get(leader, leader)
-                row["txNomeParlamentar"] = leader
-
-                row = handle_empty_integer_fields(row)
-                row = handle_empty_float_fields(row)
-                row = handle_empty_date_fields(row)
-                row = trim_sgpartido(row)
-                if not query_keys:
-                    query_keys = row.keys()
-                writer.writerow(row)
-        f.flush()
-        # how to save the csv altered to the save to the same file?
-        # f.seek(0)
-        # f.truncate()
-        # writer = csv.DictWriter(f, fieldnames=query_keys)
-        # writer.writeheader()
-        # for row in rows:
-        #     writer.writerow(row)
-        # f.flush()
-
-        
-
-
-        execute_query(f"COPY expenses FROM '{f.name}' WITH (FORMAT CSV)")
-
-
 def trim_sgpartido(row):
     if row["sgPartido"] is not None:
         row["sgPartido"] = row["sgPartido"].strip()
@@ -180,7 +120,6 @@ def handle_empty_float_fields(row):
         "vlrRestituicao",
         "vlrGlosa",
         "vlrLiquido",
-        
     ]
     for field in float_fields:
         if row[field] == "":
@@ -225,35 +164,45 @@ def handle_empty_integer_fields(row):
 
 
 def get_treemap_data(start_date, end_date):
-    query = """
-        SELECT 
-            txtDescricao, SUM(vlrLiquido) as expense, COUNT(txtDescricao) as count
-        FROM
-            expenses
-        WHERE datEmissao::date BETWEEN %s AND %s
-        GROUP BY
-            txtDescricao
-        ORDER BY SUM(vlrLiquido) DESC 
-        LIMIT 7
-    """
-    results = execute_query(query, (start_date, end_date), return_result=True)
-    return results
+    cache_key = f"treemap_data_{start_date}_{end_date}"
+
+    def data_function():
+        query = """
+            SELECT 
+                txtDescricao, SUM(vlrLiquido) as expense, COUNT(txtDescricao) as count
+            FROM
+                expenses
+            WHERE datEmissao::date BETWEEN %s AND %s
+            GROUP BY
+                txtDescricao
+            ORDER BY SUM(vlrLiquido) DESC 
+            LIMIT 7
+        """
+        results = execute_query(query, (start_date, end_date), return_result=True)
+        return results
+    
+    return cache_function(data_function, cache_key)
 
 
 def get_barplot_treemap_block_data(description, start_date, end_date):
-    query = """
-        SELECT txNomeParlamentar, SUM(vlrDocumento)
-        FROM expenses
-        WHERE txtDescricao LIKE %s
-        AND datEmissao::date BETWEEN %s AND %s
-        GROUP BY
-            txNomeParlamentar
-        ORDER BY SUM(vlrLiquido) ASC 
-    """
-    results = execute_query(
-        query, (description, start_date, end_date), return_result=True
-    )
-    return results
+    cache_key = f"barplot_treemap_block_data_{description}_{start_date}_{end_date}"
+
+    def data_function():
+        query = """
+            SELECT txNomeParlamentar, SUM(vlrDocumento)
+            FROM expenses
+            WHERE txtDescricao LIKE %s
+            AND datEmissao::date BETWEEN %s AND %s
+            GROUP BY
+                txNomeParlamentar
+            ORDER BY SUM(vlrLiquido) ASC 
+        """
+        results = execute_query(
+            query, (description, start_date, end_date), return_result=True
+        )
+        return results
+    
+    return cache_function(data_function, cache_key)
 
 
 def get_details_by_name_and_day(day, name, by_party=False):
@@ -386,6 +335,7 @@ def get_dates_and_series(pivoted_df):
     pivoted_df = pivoted_df.drop("total_expenses", axis=1)
     # Get the dates from the columns of the pivoted dataframe
     dates = pivoted_df.columns.tolist()
+    dates = dates
     # Initialize the list of series
     series = []
     # Iterate over the rows of the pivoted dataframe
@@ -397,124 +347,141 @@ def get_dates_and_series(pivoted_df):
 
 
 def get_joyplot_data(start_date, end_date, by_party=False):
-    selector = "sgPartido" if by_party else "txNomeParlamentar"
-    if by_party:
-        result = get_query_result_by_party(start_date, end_date)
-    else:
-        result = get_query_result_by_deputy(start_date, end_date)
+    """
+    A function that returns joyplot data
+    """
+    # Generate the cache key
+    cache_key = f"joyplot_data:{start_date}:{end_date}:{by_party}"
 
-    pivoted_df = get_pivoted_dataframe(result, selector)
-    pivoted_df = get_total_expenses(pivoted_df)
-    dates, series = get_dates_and_series(pivoted_df)
-    data = {
-        "dates": dates,
-        "series": series[:513],
-        "total": len(series),
-    }
-    return data
+    # Define the function to be called if the data is not in the cache
+    def data_function():
+        selector = "sgPartido" if by_party else "txNomeParlamentar"
+        if by_party:
+            result = get_query_result_by_party(start_date, end_date)
+        else:
+            result = get_query_result_by_deputy(start_date, end_date)
+
+        pivoted_df = get_pivoted_dataframe(result, selector)
+        pivoted_df = get_total_expenses(pivoted_df)
+        dates, series = get_dates_and_series(pivoted_df)
+        data = {
+            "dates": [date.strftime('%Y-%m-%d') for date in dates],
+            "series": series[:513],
+            "total": len(series),
+        }
+        return data
+
+    # Call the cache function
+    return cache_function(data_function, cache_key)
 
 
 def get_list_expenses_by_deputy(description, startDate, endDate, name):
-    query = """
-        SELECT 
-            expenses.txNomeParlamentar,
-            expenses.cpf,
-            expenses.ideCadastro,
-            expenses.nuCarteiraParlamentar,
-            expenses.nuLegislatura,
-            expenses.sgUF,
-            expenses.sgPartido,
-            expenses.codLegislatura,
-            expenses.numSubCota,
-            expenses.txtDescricao,
-            expenses.numEspecificacaoSubCota,
-            expenses.txtDescricaoEspecificacao,
-            expenses.txtFornecedor,
-            expenses.txtCNPJCPF,
-            expenses.txtNumero,
-            expenses.indTipoDocumento,
-            expenses.datEmissao,
-            expenses.vlrDocumento,
-            expenses.vlrGlosa,
-            expenses.vlrLiquido,
-            expenses.numMes,
-            expenses.numAno,
-            expenses.numParcela,
-            expenses.txtPassageiro,
-            expenses.txtTrecho,
-            expenses.numLote,
-            expenses.numRessarcimento,
-            expenses.vlrRestituicao,
-            expenses.nuDeputadoId,
-            expenses.ideDocumento,
-            expenses.urlDocumento,
-            deputados.uri,
-            deputados.nome,
-            deputados.idLegislaturaInicial,
-            deputados.idLegislaturaFinal,
-            deputados.nomeCivil,
-            deputados.cpf,
-            deputados.siglaSexo,
-            deputados.urlRedeSocial,
-            deputados.urlWebsite,
-            deputados.dataNascimento,
-            deputados.ufNascimento,
-            deputados.municipioNascimento
-        FROM expenses
-        LEFT JOIN deputados ON expenses.txNomeParlamentar = deputados.nome
-        WHERE txtDescricao = %s
-        AND datEmissao BETWEEN %s AND %s
-        AND txNomeParlamentar = %s
-    """
-    params = (description, startDate, endDate, name)
-    result = execute_query(query, params, return_result=True)
-    results = []
-    for row in result:
-        item = {
-            "txNomeParlamentar": row[0],
-            "cpfExpense": row[1],
-            "ideCadastro": row[2],
-            "nuCarteiraParlamentar": row[3],
-            "nuLegislatura": row[4],
-            "sgUF": row[5],
-            "sgPartido": row[6],
-            "codLegislatura": row[7],
-            "numSubCota": row[8],
-            "txtDescricao": row[9],
-            "numEspecificacaoSubCota": row[10],
-            "txtDescricaoEspecificacao": row[11],
-            "txtFornecedor": row[12],
-            "txtCNPJCPF": row[13],
-            "txtNumero": row[14],
-            "indTipoDocumento": row[15],
-            "datEmissao": row[16],
-            "vlrDocumento": row[17],
-            "vlrGlosa": row[18],
-            "vlrLiquido": row[19],
-            "numMes": row[20],
-            "numAno": row[21],
-            "numParcela": row[22],
-            "txtPassageiro": row[23],
-            "txtTrecho": row[24],
-            "numLote": row[25],
-            "numRessarcimento": row[26],
-            "vlrRestituicao": row[27],
-            "nuDeputadoId": row[28],
-            "ideDocumento": row[29],
-            "urlDocumento": row[30],
-            "uri": row[31],
-            "nome": row[32],
-            "idLegislaturaInicial": row[33],
-            "idLegislaturaFinal": row[34],
-            "nomeCivil": row[35],
-            "cpf": row[36],
-            "siglaSexo": row[37],
-            "urlRedeSocial": row[38],
-            "urlWebsite": row[39],
-            "dataNascimento": row[40],
-            "ufNascimento": row[41],
-            "municipioNascimento": row[42],
-        }
-        results.append(item)
+    cache_key = f"list_expenses_by_deputy:{description}:{startDate}:{endDate}:{name}"
 
-    return results
+    def data_function():
+        query = """
+            SELECT 
+                expenses.txNomeParlamentar,
+                expenses.cpf,
+                expenses.ideCadastro,
+                expenses.nuCarteiraParlamentar,
+                expenses.nuLegislatura,
+                expenses.sgUF,
+                expenses.sgPartido,
+                expenses.codLegislatura,
+                expenses.numSubCota,
+                expenses.txtDescricao,
+                expenses.numEspecificacaoSubCota,
+                expenses.txtDescricaoEspecificacao,
+                expenses.txtFornecedor,
+                expenses.txtCNPJCPF,
+                expenses.txtNumero,
+                expenses.indTipoDocumento,
+                expenses.datEmissao,
+                expenses.vlrDocumento,
+                expenses.vlrGlosa,
+                expenses.vlrLiquido,
+                expenses.numMes,
+                expenses.numAno,
+                expenses.numParcela,
+                expenses.txtPassageiro,
+                expenses.txtTrecho,
+                expenses.numLote,
+                expenses.numRessarcimento,
+                expenses.vlrRestituicao,
+                expenses.nuDeputadoId,
+                expenses.ideDocumento,
+                expenses.urlDocumento,
+                deputados.uri,
+                deputados.nome,
+                deputados.idLegislaturaInicial,
+                deputados.idLegislaturaFinal,
+                deputados.nomeCivil,
+                deputados.cpf,
+                deputados.siglaSexo,
+                deputados.urlRedeSocial,
+                deputados.urlWebsite,
+                deputados.dataNascimento,
+                deputados.ufNascimento,
+                deputados.municipioNascimento
+            FROM expenses
+            LEFT JOIN deputados ON expenses.txNomeParlamentar = deputados.nome
+            WHERE txtDescricao = %s
+            AND datEmissao BETWEEN %s AND %s
+            AND txNomeParlamentar = %s
+        """
+        params = (description, startDate, endDate, name)
+        result = execute_query(query, params, return_result=True)
+        results = []
+        for row in result:
+            item = {
+                "txNomeParlamentar": row[0],
+                "cpfExpense": row[1],
+                "ideCadastro": row[2],
+                "nuCarteiraParlamentar": row[3],
+                "nuLegislatura": row[4],
+                "sgUF": row[5],
+                "sgPartido": row[6],
+                "codLegislatura": row[7],
+                "numSubCota": row[8],
+                "txtDescricao": row[9],
+                "numEspecificacaoSubCota": row[10],
+                "txtDescricaoEspecificacao": row[11],
+                "txtFornecedor": row[12],
+                "txtCNPJCPF": row[13],
+                "txtNumero": row[14],
+                "indTipoDocumento": row[15],
+                "datEmissao": row[16].strftime('%Y-%m-%d'),
+                "vlrDocumento": row[17],
+                "vlrGlosa": row[18],
+                "vlrLiquido": row[19],
+                "numMes": row[20],
+                "numAno": row[21],
+                "numParcela": row[22],
+                "txtPassageiro": row[23],
+                "txtTrecho": row[24],
+                "numLote": row[25],
+                "numRessarcimento": row[26],
+                "vlrRestituicao": row[27],
+                "nuDeputadoId": row[28],
+                "ideDocumento": row[29],
+                "urlDocumento": row[30],
+                "uri": row[31],
+                "nome": row[32],
+                "idLegislaturaInicial": row[33],
+                "idLegislaturaFinal": row[34],
+                "nomeCivil": row[35],
+                "cpf": row[36],
+                "siglaSexo": row[37],
+                "urlRedeSocial": row[38],
+                "urlWebsite": row[39],
+                "dataNascimento": row[40].strftime('%Y-%m-%d'),
+                "ufNascimento": row[41],
+                "municipioNascimento": row[42],
+            }
+            results.append(item)
+
+        return results
+    
+    return cache_function(data_function, cache_key)
+    

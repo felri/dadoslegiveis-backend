@@ -1,0 +1,9 @@
+FROM redis:latest
+
+ENV REDIS_PORT 6379
+
+EXPOSE 6379
+
+HEALTHCHECK CMD redis-cli --raw incr ping || exit 1   
+
+CMD ["redis-server"]
