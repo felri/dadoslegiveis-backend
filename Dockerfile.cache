@@ -6,4 +6,4 @@ EXPOSE 6379
 
 HEALTHCHECK CMD redis-cli --raw incr ping || exit 1   
 
-CMD ["redis-server"]
+CMD ["redis-server", "--replica-read-only", "no"]
