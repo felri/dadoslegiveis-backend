@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import checks, joyplot, treemap
+from routes import checks, joyplot, treemap, circular_packing
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -29,3 +29,5 @@ app.include_router(treemap.router)
 app.include_router(joyplot.router)
 
 app.include_router(checks.router)
+
+app.include_router(circular_packing.router)
