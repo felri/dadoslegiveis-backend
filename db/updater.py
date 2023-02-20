@@ -19,65 +19,76 @@ def get_df_from_csv(path):
         df = pd.read_csv(filename, index_col=None, header=0)
         li.append(df)
     frame = pd.concat(li, axis=0, ignore_index=True)
-    frame['sgUF'] = frame['sgUF'].fillna('')
-    frame['sgPartido'] = frame['sgPartido'].fillna('')
-    frame['txNomeParlamentar'] = frame['txNomeParlamentar'].str.replace("'", '')
-    frame['txNomeParlamentar'] = frame['txNomeParlamentar'].str.replace('`', '')
-    frame['txNomeParlamentar'] = frame['txNomeParlamentar'].str.replace('"', '')
-    frame['txtCNPJCPF'] = frame['txtCNPJCPF'].str.replace('`', '')
-    frame['txtCNPJCPF'] = frame['txtCNPJCPF'].str.replace("'", '')
-    frame['txtCNPJCPF'] = frame['txtCNPJCPF'].str.replace('"', '')
-    frame['txtNumero'] = frame['txtNumero'].str.replace("'", '')
-    frame['txtNumero'] = frame['txtNumero'].str.replace('`', '')
-    frame['txtNumero'] = frame['txtNumero'].str.replace('"', '')
+    frame["txNomeParlamentar"] = frame["txNomeParlamentar"].str.replace("'", "")
+    frame["txNomeParlamentar"] = frame["txNomeParlamentar"].str.replace("`", "")
+    frame["txNomeParlamentar"] = frame["txNomeParlamentar"].str.replace('"', "")
+    frame["txtFornecedor"] = frame["txtFornecedor"].str.replace("'", "")
+    frame["txtFornecedor"] = frame["txtFornecedor"].str.replace("`", "")
+    frame["txtFornecedor"] = frame["txtFornecedor"].str.replace('"', "")
+    frame["txtCNPJCPF"] = frame["txtCNPJCPF"].str.replace("`", "")
+    frame["txtCNPJCPF"] = frame["txtCNPJCPF"].str.replace("'", "")
+    frame["txtCNPJCPF"] = frame["txtCNPJCPF"].str.replace('"', "")
+    frame["txtNumero"] = frame["txtNumero"].str.replace("'", "")
+    frame["txtNumero"] = frame["txtNumero"].str.replace("`", "")
+    frame["txtNumero"] = frame["txtNumero"].str.replace('"', "")
+    frame = frame.fillna("")
+
     return frame
 
 
 def save_to_db(df):
     conn = connect_to_database()
     cursor = conn.cursor()
+    print("beginning transaction")
     cursor.execute("BEGIN")
     for index, row in df.iterrows():
-        print(row)
         query = f"""
         INSERT INTO expenses (
-            txtNumero,
-            vlrDocumento,
-            datEmissao,
-            txtCNPJCPF,
             txNomeParlamentar,
+            cpf,
+            ideCadastro,
+            nuLegislatura,
+            sgUF,
+            sgPartido,
+            codLegislatura,
+            numSubCota,
+            txtDescricao,
+            txtFornecedor,
+            txtCNPJCPF,
+            txtNumero,
+            datEmissao,
+            vlrDocumento,
+            vlrLiquido,
             numMes,
             numAno,
-            numParcela,
-            numLote,
-            numRessarcimento,
-            vlrRestituicao,
-            nuDeputadoId,
-            ideDocumento,
-            urlDocumento,
-            sgPartido,
-            sgUF
+            txtPassageiro,
+            txtTrecho,
+            urlDocumento
         )
         VALUES (
-            '{row['txtNumero']}',
-            {row['vlrDocumento']},
-            '{row['datEmissao']}',
-            '{row['txtCNPJCPF']}',
-            '{row['txNomeParlamentar']}',
-            {row['numMes']},
-            {row['numAno']},
-            {row['numParcela']},
-            {row['numLote']},
-            {row['numRessarcimento']},
-            {row['vlrRestituicao']},
-            {row['nuDeputadoId']},
-            {row['ideDocumento']},
-            '{row['urlDocumento']}',
-            '{row['sgPartido']}',
-            '{row['sgUF']}'
+            '{row["txNomeParlamentar"]}',
+            '{row["cpf"]}',
+            '{row["ideCadastro"]}',
+            '{row["nuLegislatura"]}',
+            '{row["sgUF"]}',
+            '{row["sgPartido"]}',
+            '{row["codLegislatura"]}',
+            '{row["numSubCota"]}',
+            '{row["txtDescricao"]}',
+            '{row["txtFornecedor"]}',
+            '{row["txtCNPJCPF"]}',
+            '{row["txtNumero"]}',
+            '{row["datEmissao"]}',
+            '{row["vlrDocumento"]}',
+            '{row["vlrLiquido"]}',
+            '{row["numMes"]}',
+            '{row["numAno"]}',
+            '{row["txtPassageiro"]}',
+            '{row["txtTrecho"]}',
+            '{row["urlDocumento"]}'
         )
         ON CONFLICT DO NOTHING;
         """
         cursor.execute(query)
-    
+
     cursor.execute("COMMIT")
