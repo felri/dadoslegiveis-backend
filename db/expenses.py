@@ -1,5 +1,7 @@
 import csv
 import pandas as pd
+
+from scripts.utils import normalize_expenses
 from .db import execute_query
 import glob
 from scripts.cache import cache_function
@@ -179,6 +181,45 @@ def get_treemap_data(start_date, end_date):
             LIMIT 7
         """
         results = execute_query(query, (start_date, end_date), return_result=True)
+        return results
+
+    return cache_function(data_function, cache_key)
+
+
+def get_map_data(start_date, end_date):
+    cache_key = f"map_data_{start_date}_{end_date}"
+
+    def data_function():
+        query = """
+            SELECT sgUF, SUM(vlrLiquido) as total_expense
+            FROM expenses
+            WHERE datEmissao::date BETWEEN %s AND %s
+            GROUP BY sgUF
+            ORDER BY SUM(vlrLiquido) DESC 
+        """
+        results = execute_query(query, (start_date, end_date), return_result=True)
+        return normalize_expenses(results)
+
+    return cache_function(data_function, cache_key)
+
+
+def get_map_details(start_date, end_date, uf):
+    cache_key = f"map_details{start_date}_{end_date}_{uf}"
+
+    def data_function():
+        query = """
+            SELECT 
+                txtDescricao, SUM(vlrLiquido) as expense, COUNT(txtDescricao) as count
+            FROM
+                expenses
+            WHERE datEmissao::date BETWEEN %s AND %s
+            AND sgUF = %s
+            GROUP BY
+                txtDescricao
+            ORDER BY SUM(vlrLiquido) DESC 
+            LIMIT 20
+        """
+        results = execute_query(query, (start_date, end_date, uf), return_result=True)
         return results
 
     return cache_function(data_function, cache_key)
