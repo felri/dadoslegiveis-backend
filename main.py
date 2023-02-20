@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from routes import checks, joyplot, treemap, circular_packing, map
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_utils.tasks import repeat_every
+from scripts import downloader
+import pandas as pd
+from db import updater
+import os
 
 app = FastAPI()
 
@@ -17,6 +22,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+@repeat_every(seconds=86400)  # 24 hours
+def update_latest_entries_in_csv() -> None:
+    if os.environ.get("DONT_RUN_SCRIPTS") != "dev":
+        downloader.download_expenses_current_year()
+        downloader.format_csv_data_to_db()
+
+        latests_date = updater.get_latest_date()
+        df = updater.get_df_from_csv('./datasets/expenses/')
+        # Convert string dates to datetime.date objects
+        df['datEmissao'] = pd.to_datetime(df['datEmissao'], format='%Y-%m-%dT%H:%M:%S').dt.date
+        # Filter the rows with datEmissao after the latest date
+        df = df[df['datEmissao'] > latests_date]
+
+        updater.save_to_db(df)
+        print(f"Updated {len(df)} entries.")
 
 
 @app.get("/")

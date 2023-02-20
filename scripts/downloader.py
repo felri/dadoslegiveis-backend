@@ -13,21 +13,21 @@ URL_DEPUTIES = "https://dadosabertos.camara.leg.br/arquivos/deputados/csv/deputa
 URL_EXPENSES = "https://www.camara.leg.br/cotas/"
 
 YEARS = [
-    2008,
-    2009,
-    2010,
-    2011,
-    2012,
-    2013,
-    2014,
-    2015,
-    2016,
-    2017,
-    2018,
-    2019,
-    2020,
-    2021,
-    2022,
+    # 2008,
+    # 2009,
+    # 2010,
+    # 2011,
+    # 2012,
+    # 2013,
+    # 2014,
+    # 2015,
+    # 2016,
+    # 2017,
+    # 2018,
+    # 2019,
+    # 2020,
+    # 2021,
+    # 2022,
     2023,
 ]
 
@@ -103,7 +103,7 @@ PARTIES_FOR_LEADERS = {
     "LIDERANÇA DO UNIÃO BRASIL": "UNIÃO",
 }
 
-DIRECTORY = "../datasets/expenses"
+DIRECTORY = "./datasets/expenses"
 
 
 def download_deputies():
@@ -164,7 +164,6 @@ def clean_csv(csv):
     df[INTEGER_FIELDS] = df[INTEGER_FIELDS].astype(int)
     df[FLOAT_FIELDS] = df[FLOAT_FIELDS].astype(float)
     df = remove_duplicates(df)
-    print(f"File {csv} cleaned")
     return df
 
 
@@ -194,7 +193,9 @@ def save_csv(df, csv, directory=DIRECTORY):
     # Save the cleaned csv file
     if os.path.exists(f"{DIRECTORY}/updated-{csv}"):
         os.remove(f"{directory}/updated-{csv}")
-    df.to_csv(f"{directory}/updated-{csv}", index=False, header=False)
+    if os.path.exists(f"{DIRECTORY}/{csv}"):
+        os.remove(f"{directory}/{csv}")
+    df.to_csv(f"{directory}/updated-{csv}", index=False, header=True)
     print(f"File {csv} saved to {directory}/{csv}")
     return
 
@@ -224,11 +225,3 @@ def remove_all_files():
         if file.endswith(".csv"):
             os.remove(os.path.join(DIRECTORY, file))
     return
-
-
-def schedule_expenses_download():
-    print("Starting expenses download scheduler")
-    schedule.every().day.at("00:00").do(download_expenses_current_year)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)

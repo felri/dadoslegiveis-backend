@@ -1,6 +1,7 @@
 import redis
 import os
 import simplejson as json 
+import datetime
 
 EXPIRATION_TIME = 30 * 86400
 
@@ -22,6 +23,9 @@ def cache_function(function, cache_key):
     """
     A generic function that caches the results of another function
     """
+    current_year = datetime.datetime.now().year
+    expiration_time = str(current_year) in cache_key and 86400 or EXPIRATION_TIME
+    print(f"Expiration time: {expiration_time}")
     r = get_redis_instance()
     # Check if the data is already in the cache
     cached_data = r.get(cache_key)
@@ -32,5 +36,5 @@ def cache_function(function, cache_key):
     # If the data is not in the cache, call the function and cache the result
     result = function()
     r.set(cache_key, json.dumps(result))
-    r.expire(cache_key, EXPIRATION_TIME)
+    r.expire(cache_key, expiration_time)
     return result
