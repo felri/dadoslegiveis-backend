@@ -30,20 +30,21 @@ def update_latest_entries_in_csv() -> None:
         downloader.download_expenses_current_year()
         downloader.format_csv_data_to_db()
 
+        current_date = pd.to_datetime("today").date()
+        updater.delete_entries_after_date(current_date)
         latest_date = updater.get_latest_date()
-        current_date = pd.to_datetime('today').date()
-        if latest_date > current_date:
-            latest_date = current_date    
-        
-        df = updater.get_df_from_csv('./datasets/expenses/')
+        df = updater.get_df_from_csv("./datasets/expenses/")
         # Convert string dates to datetime.date objects
-        df['datEmissao'] = pd.to_datetime(df['datEmissao'], format='%Y-%m-%dT%H:%M:%S').dt.date
-        print(len(df))
-        print(latest_date)
+        df["datEmissao"] = pd.to_datetime(
+            df["datEmissao"], format="%Y-%m-%dT%H:%M:%S"
+        ).dt.date
+        # remove all the entries with datEmissao after the current date
+        df = df[df["datEmissao"] <= current_date]
+        print(f"{len(df)} entries in CSV.")
+        print(f"current date: {current_date}")
+        print(f"latest date: {latest_date}")
         # Filter the rows with datEmissao after the latest date
-        df = df[df['datEmissao'] > latest_date]
-        print(len(df))
-
+        df = df[df["datEmissao"] > latest_date]
         updater.save_to_db(df)
         print(f"Updated {len(df)} entries.")
 

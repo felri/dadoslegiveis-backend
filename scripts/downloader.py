@@ -148,7 +148,6 @@ def download_expenses(years=YEARS):
 
 def clean_csv(csv):
     df = pd.read_csv(csv, sep=";", encoding="utf-8")
-    print(df)
     df[INTEGER_FIELDS] = df[INTEGER_FIELDS].fillna(0)
     df[FLOAT_FIELDS] = df[FLOAT_FIELDS].fillna(0.0)
     # fill empty sgPartido with the party of the leader,

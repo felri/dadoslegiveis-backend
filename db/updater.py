@@ -92,3 +92,11 @@ def save_to_db(df):
         cursor.execute(query)
 
     cursor.execute("COMMIT")
+
+
+def delete_entries_after_date(date):
+    query = f"""
+    DELETE FROM expenses WHERE datEmissao > '{date}';
+    """
+    execute_query(query)
+    
